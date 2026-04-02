@@ -1,0 +1,232 @@
+#!/bin/bash
+#
+# CLI wrapper for running Cypress tests in Docker
+# Usage: ./cy <command> [options]
+#
+
+set -e
+cd "$(dirname "$0")"
+
+CONFIG="cypress.config.server.js"
+DEFAULT_STAND=""
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+usage() {
+    echo -e "${CYAN}Cypress + TMS — test management${NC}"
+    echo ""
+    echo "Usage: ./cy <command> [options]"
+    echo ""
+    echo -e "${GREEN}Run tests:${NC}"
+    echo "  ./cy run [spec] [--stand PORT]     Run tests"
+    echo "  ./cy run                           All tests"
+    echo "  ./cy run LoginTests                Single file (by name)"
+    echo "  ./cy run LoginTests --stand 2021   On a specific stand"
+    echo "  ./cy run 'Report_*'                By glob pattern"
+    echo "  ./cy run LoginTests --user admin:pass  As a different user"
+    echo ""
+    echo -e "${GREEN}Upload to TMS:${NC}"
+    echo "  ./cy upload                        To default plan"
+    echo "  ./cy upload --plan 'Regression'    To plan by name"
+    echo "  ./cy upload --plan-id 2            To plan by ID"
+    echo "  ./cy upload --dry-run              Preview (no upload)"
+    echo ""
+    echo -e "${GREEN}Run + upload:${NC}"
+    echo "  ./cy run-upload [spec] [--stand PORT] [--plan 'Name']"
+    echo "  ./cy run-upload LoginTests         Run and upload"
+    echo "  ./cy run-upload --plan-id 2        All tests to specific plan"
+    echo ""
+    echo -e "${GREEN}Service:${NC}"
+    echo "  ./cy plans                         List test plans"
+    echo "  ./cy clean                         Clear reports"
+    echo "  ./cy update                        Update tests from git"
+    echo "  ./cy build                         Rebuild Docker image"
+    echo "  ./cy help                          This help"
+}
+
+# Parse --stand PORT and --user login:password from arguments
+parse_stand() {
+    STAND=""
+    USER_OVERRIDE=""
+    REMAINING=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --stand)
+                STAND="$2"
+                shift 2
+                ;;
+            --user)
+                USER_OVERRIDE="$2"
+                shift 2
+                ;;
+            *)
+                REMAINING+=("$1")
+                shift
+                ;;
+        esac
+    done
+}
+
+# Parse TMS arguments (--plan, --plan-id, --dry-run)
+parse_testy() {
+    TESTY_ARGS=()
+    REMAINING=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --plan)
+                TESTY_ARGS+=("--plan" "$2")
+                shift 2
+                ;;
+            --plan-id)
+                TESTY_ARGS+=("--plan-id" "$2")
+                shift 2
+                ;;
+            --dry-run)
+                TESTY_ARGS+=("--dry-run")
+                shift
+                ;;
+            *)
+                REMAINING+=("$1")
+                shift
+                ;;
+        esac
+    done
+}
+
+# Resolve stand alias to URL
+resolve_stand() {
+    local stand="$1"
+    case "$stand" in
+        prod)     echo "your-server-ip:443" ;;
+        staging)  echo "your-staging-ip:443" ;;
+        local)    echo "localhost:3000" ;;
+        # If just a port number — default server IP
+        [0-9]*)   echo "192.168.1.100:$stand" ;;
+        *)        echo "$stand" ;;
+    esac
+}
+
+# Build Docker env variables for --user
+build_docker_env() {
+    DOCKER_ENV=()
+    if [[ -n "$USER_OVERRIDE" ]]; then
+        local login="${USER_OVERRIDE%%:*}"
+        local pass="${USER_OVERRIDE#*:}"
+        DOCKER_ENV+=("-e" "CYPRESS_username=$login" "-e" "CYPRESS_password=$pass")
+        echo -e "${CYAN}  User: $login${NC}"
+    fi
+}
+
+# Build cypress run arguments array
+build_cypress_args() {
+    local spec="$1"
+    local stand="$2"
+
+    CYPRESS_ARGS=("npx" "cypress" "run" "--config-file" "$CONFIG")
+
+    if [[ -n "$stand" ]]; then
+        stand=$(resolve_stand "$stand")
+        CYPRESS_ARGS+=("--config" "baseUrl=https://$stand/")
+    fi
+
+    if [[ -n "$spec" ]]; then
+        if [[ "$spec" == cypress/* ]] || [[ "$spec" == */* ]]; then
+            CYPRESS_ARGS+=("--spec" "$spec")
+        else
+            CYPRESS_ARGS+=("--spec" "cypress/e2e/${spec}*")
+        fi
+    fi
+}
+
+case "${1:-help}" in
+    run)
+        shift
+        parse_stand "$@"
+        set -- "${REMAINING[@]}"
+        parse_testy "$@"
+        SPEC="${REMAINING[0]}"
+
+        build_cypress_args "$SPEC" "$STAND"
+        build_docker_env
+        echo -e "${YELLOW}> ${CYPRESS_ARGS[*]}${NC}"
+        docker compose run --rm "${DOCKER_ENV[@]}" --entrypoint "" cypress "${CYPRESS_ARGS[@]}"
+        ;;
+
+    upload)
+        shift
+        echo -e "${YELLOW}> Uploading results to TMS${NC}"
+        docker compose run --rm --entrypoint node cypress testy-integration.js "$@"
+        ;;
+
+    run-upload)
+        shift
+        parse_stand "$@"
+        set -- "${REMAINING[@]}"
+        parse_testy "$@"
+        SPEC="${REMAINING[0]}"
+
+        build_cypress_args "$SPEC" "$STAND"
+        build_docker_env
+        TESTY_CMD="node testy-integration.js ${TESTY_ARGS[*]}"
+
+        CYPRESS_STR="${CYPRESS_ARGS[*]}"
+        echo -e "${YELLOW}> $CYPRESS_STR && $TESTY_CMD${NC}"
+        docker compose run --rm "${DOCKER_ENV[@]}" --entrypoint "" cypress sh -c "${CYPRESS_STR} && ${TESTY_CMD}"
+        ;;
+
+    plans)
+        echo -e "${YELLOW}> Test plans list${NC}"
+        docker compose run --rm --entrypoint node cypress testy-integration.js --list
+        ;;
+
+    clean)
+        echo -e "${YELLOW}> Cleaning reports${NC}"
+        rm -rf cypress/reports/* cypress/screenshots/* cypress/videos/*
+        echo -e "${GREEN}Done${NC}"
+        ;;
+
+    update)
+        echo -e "${YELLOW}> Updating tests from git${NC}"
+        cd /tmp/your-project
+        git pull
+        rm -rf /usr/local/cypress/cypress
+        cp -r /tmp/your-project/e2e/cypress /usr/local/cypress/cypress
+        # Create local.settings.js if missing
+        SETTINGS="/usr/local/cypress/cypress/personalsettings/local.settings.js"
+        if [[ ! -f "$SETTINGS" ]]; then
+            mkdir -p "$(dirname "$SETTINGS")"
+            cat > "$SETTINGS" << 'SETTINGSEOF'
+module.exports = {
+  username: 'testuser',
+  password: 'testpassword',
+};
+SETTINGSEOF
+            echo -e "${GREEN}Created $SETTINGS${NC}"
+        fi
+        cd /usr/local/cypress
+        echo -e "${YELLOW}> Rebuilding Docker image${NC}"
+        docker compose build --no-cache
+        echo -e "${GREEN}Done${NC}"
+        ;;
+
+    build)
+        echo -e "${YELLOW}> Rebuilding Docker image${NC}"
+        docker compose build --no-cache
+        echo -e "${GREEN}Done${NC}"
+        ;;
+
+    help|--help|-h|"")
+        usage
+        ;;
+
+    *)
+        echo "Unknown command: $1"
+        echo ""
+        usage
+        exit 1
+        ;;
+esac

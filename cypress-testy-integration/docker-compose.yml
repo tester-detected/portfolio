@@ -1,0 +1,16 @@
+services:
+  cypress:
+    build: .
+    # Host network — container can reach localhost services directly
+    # (TMS on localhost:8080, App on localhost:443)
+    network_mode: host
+    volumes:
+      # Test results saved to host
+      - ./cypress/reports:/e2e/cypress/reports
+      # Screenshots and videos
+      - ./cypress/screenshots:/e2e/cypress/screenshots
+      - ./cypress/videos:/e2e/cypress/videos
+    environment:
+      # TMS integration: same server
+      - TESTY_HOST=localhost
+      - TESTY_PORT=8080
