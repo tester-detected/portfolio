@@ -41,7 +41,7 @@ REST API testing for an e-commerce application: auth, CRUD, validation, security
 ### [Test Design Examples](./test-design/)
 Techniques applied to a login form: equivalence partitioning, boundary values, decision tables, pairwise testing, state transition diagrams.
 
-### [SQL for QA](./backend-testing/sql/)
+### [SQL for QA](./sql-for-qa/)
 Practical SQL queries for data validation, duplicate detection, joins, and aggregations used in day-to-day testing.
 
 ### [QA Theory Knowledge Base](./qa-theory/)
