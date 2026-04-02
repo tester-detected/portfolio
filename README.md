@@ -31,10 +31,17 @@ Integration between Cypress and Testy TMS, running in Docker on a dedicated test
 - Bash CLI wrapper (`cy`) for running tests, uploading results, and managing the environment  
 - **Stack:** Node.js, Docker, Bash, Mochawesome, REST API
 
-### [Test Design Examples](./test-design/) *(in progress)*
-Techniques: equivalence partitioning, boundary values, decision tables, pairwise testing, state transition diagrams.
+### [API Testing](./api-testing/)
+REST API testing for an e-commerce application: auth, CRUD, validation, security checks.  
+- 30+ test cases covering positive, negative, and edge-case scenarios  
+- Postman collection with automated assertions (ready to import and run)  
+- Security checks: SQL injection, XSS, CORS, response headers  
+- **Stack:** Postman, REST API, JSON
 
-### [SQL for QA](./backend-testing/sql/) *(in progress)*
+### [Test Design Examples](./test-design/)
+Techniques applied to a login form: equivalence partitioning, boundary values, decision tables, pairwise testing, state transition diagrams.
+
+### [SQL for QA](./backend-testing/sql/)
 Practical SQL queries for data validation, duplicate detection, joins, and aggregations used in day-to-day testing.
 
 ## Approach
