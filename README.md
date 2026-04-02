@@ -44,6 +44,9 @@ Techniques applied to a login form: equivalence partitioning, boundary values, d
 ### [SQL for QA](./backend-testing/sql/)
 Practical SQL queries for data validation, duplicate detection, joins, and aggregations used in day-to-day testing.
 
+### [QA Theory Knowledge Base](./qa-theory/)
+Comprehensive reference on testing theory, web technologies, APIs, databases, DevOps, security, and automation — 24 topics.
+
 ## Approach
 
 - Clean code principles: KISS, DRY, YAGNI, SOLID  
